@@ -1,12 +1,11 @@
 {
-  "check_interval": 99,
+  "check_interval": 300,
   "segment_duration": 7200,
-  "output_dir": "/home/zzuu/download/douyin_recorder_gui/recordings",
+  "output_dir": "recordings",
   "log_file": "douyin_recorder.log",
   "streamers": [
-    {
-      "name": "test",
-      "url": "https://x.com"
-    }
+    {"name": "抖音-央视网快看", "url": "https://live.douyin.com/127453393722"},
+    {"name": "B站-直播", "url": "https://live.bilibili.com/6"},
+    {"name": "虎牙-直播", "url": "https://www.huya.com/lpl"}
   ]
 }

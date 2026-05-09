@@ -87,7 +87,13 @@ def load_config():
     for k, v in DEFAULT_CONFIG.items():
         cfg.setdefault(k, v)
     cfg["output_dir"] = Path(cfg["output_dir"])
-    if not cfg["output_dir"].is_absolute():
+    if cfg["output_dir"].is_absolute():
+        # 检测跨平台绝对路径（如 Linux 路径出现在 Windows 上），回退为相对路径
+        if sys.platform == "win32" and str(cfg["output_dir"]).startswith("/home/"):
+            cfg["output_dir"] = DATA_DIR / "recordings"
+        elif sys.platform != "win32" and str(cfg["output_dir"]).startswith(("C:\\", "D:\\")):
+            cfg["output_dir"] = DATA_DIR / "recordings"
+    else:
         cfg["output_dir"] = DATA_DIR / cfg["output_dir"]
     cfg["output_dir"].mkdir(parents=True, exist_ok=True)
     return cfg
