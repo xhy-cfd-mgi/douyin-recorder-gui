@@ -311,27 +311,98 @@ except ImportError:
     HAS_TK = False
 
 
+def resolve_streamer_name(url):
+    """通过平台 API 解析主播名，失败返回 None"""
+    import urllib.request, re, ssl
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    }
+
+    def fetch(api_url, referer=None):
+        h = dict(headers)
+        if referer:
+            h["Referer"] = referer
+        req = urllib.request.Request(api_url, headers=h)
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            return json.loads(resp.read())
+
+    try:
+        # 抖音 Douyin
+        m = re.search(r"live\.douyin\.com/(\d+)", url)
+        if m:
+            data = fetch(
+                f"https://live.douyin.com/webcast/room/web/enter/?aid=6383&web_rid={m.group(1)}",
+                referer=url)
+            nick = data.get("data", {}).get("room", {}).get("owner", {}).get("nickname", "")
+            if nick:
+                return nick
+
+        # B站 Bilibili — 两步：room info → uid → user info → uname
+        m = re.search(r"live\.bilibili\.com/(\d+)", url)
+        if m:
+            data = fetch(f"https://api.live.bilibili.com/room/v1/Room/get_info?id={m.group(1)}",
+                         referer="https://live.bilibili.com/")
+            uid = data.get("data", {}).get("uid", 0)
+            if uid:
+                udata = fetch(f"https://api.live.bilibili.com/live_user/v1/Master/info?uid={uid}",
+                              referer="https://live.bilibili.com/")
+                uname = udata.get("data", {}).get("info", {}).get("uname", "")
+                if uname:
+                    return uname
+            # fallback: 用直播间标题
+            title = data.get("data", {}).get("title", "")
+            if title:
+                return title
+
+        # 虎牙 Huya — 页面标题提取
+        m = re.search(r"huya\.com/(\w+)", url)
+        if m:
+            req = urllib.request.Request(url, headers={**headers, "Referer": "https://www.huya.com/"})
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+            tag = re.search(r'<title>([^<]+)</title>', html)
+            if tag:
+                title = tag.group(1).strip()
+                for sep in [" - ", "_"]:
+                    if sep in title:
+                        return title.split(sep)[0]
+                return title
+
+    except Exception:
+        pass
+    return None
+
+
 class StreamerDialog(tk.Toplevel):
     """添加 / 编辑直播间的弹窗"""
 
     def __init__(self, parent, title, initial_name="", initial_url=""):
         super().__init__(parent)
         self.title(title)
-        self.geometry("420x160")
+        self.geometry("420x190")
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
         self.result = None
 
-        ttk.Label(self, text="主播名:").grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
+        ttk.Label(self, text="主播名:").grid(row=0, column=0, padx=10, pady=(10, 5), sticky=tk.W)
         self.name_entry = ttk.Entry(self, width=38)
         self.name_entry.insert(0, initial_name)
-        self.name_entry.grid(row=0, column=1, padx=10, pady=10)
+        self.name_entry.grid(row=0, column=1, padx=10, pady=(10, 5))
 
         ttk.Label(self, text="直播间 URL:").grid(row=1, column=0, padx=10, pady=5, sticky=tk.W)
-        self.url_entry = ttk.Entry(self, width=38)
+        url_frame = ttk.Frame(self)
+        url_frame.grid(row=1, column=1, padx=10, pady=5, sticky=tk.W)
+        self.url_entry = ttk.Entry(url_frame, width=28)
         self.url_entry.insert(0, initial_url)
-        self.url_entry.grid(row=1, column=1, padx=10, pady=5)
+        self.url_entry.pack(side=tk.LEFT)
+        ttk.Button(url_frame, text="解析", width=6, command=self._on_resolve).pack(side=tk.LEFT, padx=(4, 0))
+        self._resolve_btn = url_frame.winfo_children()[-1]
 
         btn_frame = ttk.Frame(self)
         btn_frame.grid(row=2, column=0, columnspan=2, pady=15)
@@ -340,6 +411,27 @@ class StreamerDialog(tk.Toplevel):
 
         self.name_entry.focus_set()
         self.name_entry.selection_range(0, tk.END)
+
+    def _on_resolve(self):
+        url = self.url_entry.get().strip()
+        if not url:
+            return
+        self._resolve_btn.config(text="...", state=tk.DISABLED)
+        self.update()
+
+        def _do():
+            name = resolve_streamer_name(url)
+            self.root.after(0, lambda: self._on_resolve_done(name))
+
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _on_resolve_done(self, name):
+        self._resolve_btn.config(text="解析", state=tk.NORMAL)
+        if name:
+            self.name_entry.delete(0, tk.END)
+            self.name_entry.insert(0, name)
+        else:
+            messagebox.showwarning("解析失败", "无法获取主播名，请手动输入", parent=self)
 
     def _on_save(self):
         name = self.name_entry.get().strip()
