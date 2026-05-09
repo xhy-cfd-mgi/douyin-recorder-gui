@@ -441,8 +441,11 @@ class StreamerDialog(tk.Toplevel):
         self.update()
 
         def _do():
-            name = resolve_streamer_name(url)
-            self.root.after(0, lambda: self._on_resolve_done(name))
+            try:
+                name = resolve_streamer_name(url)
+            except Exception as e:
+                name = None
+            self.after(0, lambda n=name: self._on_resolve_done(n))
 
         threading.Thread(target=_do, daemon=True).start()
 
