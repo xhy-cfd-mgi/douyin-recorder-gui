@@ -28,11 +28,10 @@ except ImportError:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-# PyInstaller 打包后 sys._MEIPASS 是只读的，数据文件存到 APPDATA
+# PyInstaller 打包后数据文件存到 exe 所在目录（便携式）
 _RUNNING_AS_EXE = getattr(sys, "frozen", False)
 if _RUNNING_AS_EXE:
-    DATA_DIR = Path(os.environ.get("APPDATA", SCRIPT_DIR)) / "douyin-recorder-gui"
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_DIR = Path(sys.executable).parent
 else:
     DATA_DIR = SCRIPT_DIR
 

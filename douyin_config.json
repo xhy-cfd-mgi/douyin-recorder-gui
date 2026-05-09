@@ -1,9 +1,12 @@
-{
+﻿{
   "check_interval": 300,
   "segment_duration": 7200,
-  "output_dir": "recordings",
+  "output_dir": "/home/zzuu/download/douyin_recorder_gui/recordings",
   "log_file": "douyin_recorder.log",
   "streamers": [
-    {"name": "央视网快看", "url": "https://live.douyin.com/127453393722"}
+    {
+      "name": "测试",
+      "url": "https://x.com"
+    }
   ]
 }
