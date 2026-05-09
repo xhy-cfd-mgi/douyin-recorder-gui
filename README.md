@@ -107,3 +107,7 @@ A: 添加多个直播间即可，每个主播独立录制到各自的子目录�
 ## License
 
 MIT
+
+---
+
+*本项目由 Claude Code + DeepSeek V4 创建 | Built with Claude Code + DeepSeek V4*
