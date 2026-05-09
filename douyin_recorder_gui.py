@@ -332,15 +332,36 @@ def resolve_streamer_name(url):
             return json.loads(resp.read())
 
     try:
-        # 抖音 Douyin
+        # 抖音 Douyin — 页面内嵌 JSON (同 streamlink 插件方式，无 geo-restriction)
         m = re.search(r"live\.douyin\.com/(\d+)", url)
         if m:
-            data = fetch(
-                f"https://live.douyin.com/webcast/room/web/enter/?aid=6383&web_rid={m.group(1)}",
-                referer=url)
-            nick = data.get("data", {}).get("room", {}).get("owner", {}).get("nickname", "")
-            if nick:
-                return nick
+            req = urllib.request.Request(url, headers={**headers, "Referer": "https://live.douyin.com/"})
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+            # 匹配 self.__pace_f.push([0,"json:..."]) 模式
+            matches = re.findall(
+                r'self\.__pace_f\.push\(\[\d+,("\w+:(?:.(?!self\.__pace_f))*?")]\)',
+                html, re.DOTALL)
+            for m_raw in matches:
+                try:
+                    # 去掉前缀如 "json:" 或 "state:"
+                    decoded = json.loads(m_raw)
+                    inner = re.sub(r'^\w+:', '', decoded)
+                    state = json.loads(inner)
+                    # 遍历数组找包含 state 的字典
+                    for item in state:
+                        if isinstance(item, dict) and "state" in item:
+                            rs = item["state"].get("roomStore", {})
+                            room = rs.get("roomInfo", {}).get("room")
+                            anchor = rs.get("roomInfo", {}).get("anchor")
+                            if anchor:
+                                if isinstance(anchor, dict):
+                                    return anchor.get("nickname", "")
+                                return anchor
+                            if room and len(room) > 2:
+                                return room[2]  # title fallback
+                except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+                    continue
 
         # B站 Bilibili — 两步：room info → uid → user info → uname
         m = re.search(r"(?:live|www)\.bilibili\.com/(\d+)", url)
