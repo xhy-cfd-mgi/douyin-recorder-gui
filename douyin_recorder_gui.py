@@ -20,6 +20,12 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+# 确保 PyInstaller 打包时包含 streamlink
+try:
+    import streamlink  # noqa: F401
+except ImportError:
+    pass
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 # PyInstaller 打包后 sys._MEIPASS 是只读的，数据文件存到 APPDATA
@@ -133,6 +139,15 @@ def remove_pid():
 WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
+def _streamlink_cmd():
+    """返回 streamlink 的命令行：打包为 exe 时用模块调用，否则找外部可执行文件"""
+    if getattr(sys, "frozen", False):
+        # PyInstaller 打包后 streamlink 是内置 Python 模块
+        return [sys.executable, "-m", "streamlink"]
+    sl = _find_exe("streamlink")
+    return [sl] if sl else None
+
+
 def _find_exe(name):
     """查找可执行文件：优先 venv，其次 PATH，再查常见安装路径"""
     exe_name = name + ".exe" if sys.platform == "win32" else name
@@ -193,13 +208,13 @@ def _terminate_proc(proc, timeout=10):
 
 
 def is_live(name, url):
-    sl = _find_exe("streamlink")
-    if not sl:
+    sl_cmd = _streamlink_cmd()
+    if not sl_cmd:
         logger.error("未找到 streamlink，请运行 setup.bat 安装: pip install streamlink")
         return False
     try:
         result = subprocess.run(
-            [sl, url, "best", "--stream-url", "--http-no-ssl-verify"],
+            [*sl_cmd, url, "best", "--stream-url", "--http-no-ssl-verify"],
             capture_output=True, text=True, timeout=30,
             creationflags=WINDOW_FLAGS,
         )
@@ -210,8 +225,8 @@ def is_live(name, url):
 
 
 def start_recording(cfg, name, url, segment):
-    sl = _find_exe("streamlink")
-    if not sl:
+    sl_cmd = _streamlink_cmd()
+    if not sl_cmd:
         logger.error("未找到 streamlink")
         return None, None
     out_path = get_output_path(cfg, name, segment)
@@ -219,7 +234,7 @@ def start_recording(cfg, name, url, segment):
 
     with open(log_path, "a", encoding="utf-8") as log_fp:
         proc = subprocess.Popen(
-            [sl, url, "best",
+            [*sl_cmd, url, "best",
              "--http-no-ssl-verify",
              "--retry-streams", "5", "--retry-open", "10",
              "-o", str(out_path)],

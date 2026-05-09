@@ -20,7 +20,7 @@ pip install pyinstaller -q
 echo.
 
 echo [2/3] Building EXE...
-pyinstaller --onefile --windowed --name DouyinRecorder --add-data ffmpeg\bin\ffmpeg.exe;ffmpeg\bin --clean douyin_recorder_gui.py
+pyinstaller --onefile --windowed --name DouyinRecorder --hidden-import streamlink --collect-all streamlink --add-data ffmpeg\bin\ffmpeg.exe;ffmpeg\bin --clean douyin_recorder_gui.py
 
 echo.
 if exist dist\DouyinRecorder.exe (
