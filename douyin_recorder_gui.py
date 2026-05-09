@@ -21,9 +21,18 @@ from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = SCRIPT_DIR / "douyin_config.json"
-STATE_PATH = SCRIPT_DIR / "douyin_state.json"
-PID_FILE = SCRIPT_DIR / "douyin_recorder.pid"
+
+# PyInstaller 打包后 sys._MEIPASS 是只读的，数据文件存到 APPDATA
+_RUNNING_AS_EXE = getattr(sys, "frozen", False)
+if _RUNNING_AS_EXE:
+    DATA_DIR = Path(os.environ.get("APPDATA", SCRIPT_DIR)) / "douyin-recorder-gui"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    DATA_DIR = SCRIPT_DIR
+
+CONFIG_PATH = DATA_DIR / "douyin_config.json"
+STATE_PATH = DATA_DIR / "douyin_state.json"
+PID_FILE = DATA_DIR / "douyin_recorder.pid"
 
 DEFAULT_CONFIG = {
     "check_interval": 300,
@@ -54,7 +63,10 @@ class GuiLogHandler(logging.Handler):
 
 def setup_logging(log_path, gui_callback):
     logging.addLevelName(25, "IMPORTANT")
-    fh = logging.FileHandler(log_path, encoding="utf-8")
+    log_path = Path(log_path)
+    if not log_path.is_absolute():
+        log_path = DATA_DIR / log_path
+    fh = logging.FileHandler(str(log_path), encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     gh = GuiLogHandler(gui_callback)
     logger.addHandler(fh)
@@ -71,7 +83,7 @@ def load_config():
         cfg.setdefault(k, v)
     cfg["output_dir"] = Path(cfg["output_dir"])
     if not cfg["output_dir"].is_absolute():
-        cfg["output_dir"] = SCRIPT_DIR / cfg["output_dir"]
+        cfg["output_dir"] = DATA_DIR / cfg["output_dir"]
     cfg["output_dir"].mkdir(parents=True, exist_ok=True)
     return cfg
 
@@ -137,7 +149,14 @@ def _find_exe(name):
     if found:
         return found
 
-    # 3. Windows 常见 ffmpeg 安装路径
+    # 3. PyInstaller 打包后的 _MEIPASS 目录
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidate = Path(meipass) / "ffmpeg" / "bin" / exe_name
+        if candidate.exists():
+            return str(candidate)
+
+    # 4. Windows 常见 ffmpeg 安装路径
     if sys.platform == "win32" and name == "ffmpeg":
         for base in [
             SCRIPT_DIR / "ffmpeg" / "bin",
