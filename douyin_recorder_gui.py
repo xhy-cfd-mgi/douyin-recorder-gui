@@ -152,7 +152,8 @@ class _StreamRecorder(threading.Thread):
 
     def stop(self, timeout=10):
         self._stop_event.set()
-        self.join(timeout=timeout)
+        if self.is_alive():
+            self.join(timeout=timeout)
 
     def run(self):
         import streamlink
