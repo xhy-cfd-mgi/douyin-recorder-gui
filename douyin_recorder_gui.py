@@ -343,7 +343,7 @@ def resolve_streamer_name(url):
                 return nick
 
         # B站 Bilibili — 两步：room info → uid → user info → uname
-        m = re.search(r"live\.bilibili\.com/(\d+)", url)
+        m = re.search(r"(?:live|www)\.bilibili\.com/(\d+)", url)
         if m:
             data = fetch(f"https://api.live.bilibili.com/room/v1/Room/get_info?id={m.group(1)}",
                          referer="https://live.bilibili.com/")
