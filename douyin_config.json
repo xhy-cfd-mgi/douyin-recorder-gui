@@ -1,12 +1,9 @@
-﻿{
+{
   "check_interval": 300,
   "segment_duration": 7200,
-  "output_dir": "/home/zzuu/download/douyin_recorder_gui/recordings",
+  "output_dir": "recordings",
   "log_file": "douyin_recorder.log",
   "streamers": [
-    {
-      "name": "张三的直播间",
-      "url": "https://live.douyin.com/123"
-    }
+    {"name": "央视网快看", "url": "https://live.douyin.com/127453393722"}
   ]
 }
