@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+recordings/
+*.log
+*.pid
+douyin_state.json
+.vscode/
+.idea/
+*.swp
+*.swo
+ffmpeg/

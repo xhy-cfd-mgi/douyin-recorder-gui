@@ -1,0 +1,7 @@
+{
+  "check_interval": 300,
+  "segment_duration": 7200,
+  "output_dir": "recordings",
+  "log_file": "douyin_recorder.log",
+  "streamers": []
+}
