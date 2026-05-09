@@ -1,12 +1,12 @@
-# 抖音直播自动录屏工具 (Douyin Live Recorder)
+# 多平台直播自动录屏工具 (Multi-Platform Live Recorder)
 
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://www.python.org/downloads/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-green)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
-一个基于 Python + tkinter 的 Windows GUI 工具，自动检测抖音直播间开播状态并录制视频。支持多直播间监控、自动分段。
+基于 Python + tkinter 的 Windows GUI 工具，自动检测直播开播状态并录制视频。支持**抖音、B站、虎牙**等多平台，自动分段存为 MP4。
 
-A Windows GUI tool for automatically detecting and recording Douyin (TikTok China) live streams. Supports multiple streamers and auto-segmentation.
+A Windows GUI tool for automatically detecting and recording live streams from multiple platforms (Douyin, Bilibili, Huya and more). Auto-segmentation to MP4.
 
 ## 截图 Screenshot
 
@@ -25,8 +25,20 @@ A Windows GUI tool for automatically detecting and recording Douyin (TikTok Chin
   共 2 个直播间 | 录制中: 1 | 检查间隔: 300s
 ```
 
+## 支持的平台 Supported Platforms
+
+| 平台 | 插件 | 已验证 |
+|------|------|--------|
+| 抖音 Douyin | `douyin` | ✓ |
+| B站 Bilibili | `bilibili` | ✓ |
+| 虎牙 Huya | `huya` | ✓ |
+| Twitch | `twitch` | 支持 |
+| YouTube | `youtube` | 支持 |
+| 更多 130+ | — | —
+
 ## 功能 Features
 
+- **多平台**: 支持抖音、B站、虎牙等 streamlink 内置的 130+ 个平台
 - **GUI 管理**: 增删改查直播间，无需手动编辑配置文件
 - **自动检测**: 定时轮询，开播自动录制（基于 streamlink Python API）
 - **智能分段**: 每 N 分钟自动分片，单个文件不过大
@@ -73,7 +85,9 @@ A Windows GUI tool for automatically detecting and recording Douyin (TikTok Chin
   "output_dir": "recordings",
   "log_file": "douyin_recorder.log",
   "streamers": [
-    {"name": "央视网快看", "url": "https://live.douyin.com/127453393722"}
+    {"name": "抖音-央视网快看", "url": "https://live.douyin.com/127453393722"},
+    {"name": "B站-直播", "url": "https://live.bilibili.com/6"},
+    {"name": "虎牙-直播", "url": "https://www.huya.com/lpl"}
   ]
 }
 ```
