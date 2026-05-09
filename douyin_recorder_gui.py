@@ -139,13 +139,47 @@ def remove_pid():
 WINDOW_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
-def _streamlink_cmd():
-    """返回 streamlink 的命令行：打包为 exe 时用模块调用，否则找外部可执行文件"""
-    if getattr(sys, "frozen", False):
-        # PyInstaller 打包后 streamlink 是内置 Python 模块
-        return [sys.executable, "-m", "streamlink"]
-    sl = _find_exe("streamlink")
-    return [sl] if sl else None
+class _StreamRecorder(threading.Thread):
+    """后台线程：使用 streamlink Python API 录制直播流到文件"""
+
+    def __init__(self, url, out_path, log_path):
+        super().__init__(daemon=True)
+        self.url = url
+        self.out_path = out_path
+        self.log_path = log_path
+        self._stop_event = threading.Event()
+        self._error = None
+
+    def stop(self, timeout=10):
+        self._stop_event.set()
+        self.join(timeout=timeout)
+
+    def run(self):
+        import streamlink
+        try:
+            session = streamlink.Streamlink()
+            session.set_option("http-no-ssl-verify", True)
+            session.set_option("stream-segment-attempts", 5)
+            session.set_option("stream-segment-timeout", 30.0)
+            session.set_option("stream-timeout", 60.0)
+            streams = session.streams(self.url)
+            if not streams:
+                self._error = "no streams available"
+                return
+            stream = streams.get("best")
+            if not stream:
+                self._error = "no best stream"
+                return
+            fd = stream.open()
+            with open(self.out_path, "wb") as out_fd:
+                while not self._stop_event.is_set():
+                    data = fd.read(1024 * 1024)  # 1MB chunks
+                    if not data:
+                        break
+                    out_fd.write(data)
+            fd.close()
+        except Exception as e:
+            self._error = str(e)
 
 
 def _find_exe(name):
@@ -196,53 +230,41 @@ def _find_exe(name):
     return None  # 未找到
 
 
-def _terminate_proc(proc, timeout=10):
-    if proc is None or proc.poll() is not None:
+def _stop_recorder(recorder, timeout=10):
+    if recorder is None:
         return
-    proc.terminate()
-    try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
+    if isinstance(recorder, subprocess.Popen):
+        if recorder.poll() is not None:
+            return
+        recorder.terminate()
+        try:
+            recorder.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            recorder.kill()
+            recorder.wait()
+    elif isinstance(recorder, _StreamRecorder):
+        recorder.stop(timeout=timeout)
 
 
 def is_live(name, url):
-    sl_cmd = _streamlink_cmd()
-    if not sl_cmd:
-        logger.error("未找到 streamlink，请运行 setup.bat 安装: pip install streamlink")
-        return False
     try:
-        result = subprocess.run(
-            [*sl_cmd, url, "best", "--stream-url", "--http-no-ssl-verify"],
-            capture_output=True, text=True, timeout=30,
-            creationflags=WINDOW_FLAGS,
-        )
-        return result.returncode == 0 and result.stdout.strip()
-    except subprocess.TimeoutExpired:
-        logger.warning(f"[{name}] 检查直播状态超时")
+        import streamlink
+        session = streamlink.Streamlink()
+        session.set_option("http-no-ssl-verify", True)
+        streams = session.streams(url)
+        return bool(streams)
+    except Exception as e:
+        logger.warning(f"[{name}] 检查直播状态失败: {e}")
         return False
 
 
 def start_recording(cfg, name, url, segment):
-    sl_cmd = _streamlink_cmd()
-    if not sl_cmd:
-        logger.error("未找到 streamlink")
-        return None, None
     out_path = get_output_path(cfg, name, segment)
     log_path = cfg["output_dir"] / f"{name}_streamlink.log"
-
-    with open(log_path, "a", encoding="utf-8") as log_fp:
-        proc = subprocess.Popen(
-            [*sl_cmd, url, "best",
-             "--http-no-ssl-verify",
-             "--retry-streams", "5", "--retry-open", "10",
-             "-o", str(out_path)],
-            stdout=log_fp, stderr=subprocess.STDOUT,
-            creationflags=WINDOW_FLAGS,
-        )
+    recorder = _StreamRecorder(url, out_path, log_path)
+    recorder.start()
     logger.log(25, f"[{name}] 开始录制 segment {segment} → {out_path.name}")
-    return proc, out_path
+    return recorder, out_path
 
 
 def get_output_path(cfg, name, segment):
@@ -528,32 +550,31 @@ class RecorderApp:
         prev_segment = info.get("segment", 0)
 
         if info["status"] == STATUS_RECORDING:
-            proc = info["_proc"]
-            if proc and proc.poll() is None:
+            rec = info["_proc"]
+            if rec and rec.is_alive():
                 elapsed = now - info["start_time"]
                 if elapsed >= self.cfg["segment_duration"]:
                     logger.log(25, f"[{name}] segment {info['segment']} 已达 "
                                      f"{int(elapsed // 60)} 分钟，截断")
-                    _terminate_proc(proc)
+                    _stop_recorder(rec)
                     post_process(info["_out_path"])
                     info["segment"] += 1
                     info["start_time"] = now
-                    proc2, path2 = start_recording(self.cfg, name, url, info["segment"])
-                    if proc2 is None:
+                    rec2, path2 = start_recording(self.cfg, name, url, info["segment"])
+                    if rec2 is None:
                         info["status"] = STATUS_IDLE
                         info["next_check"] = now + self.cfg["check_interval"]
                     else:
-                        info["_proc"] = proc2
+                        info["_proc"] = rec2
                         info["_out_path"] = path2
-                        info["pid"] = proc2.pid
                     self._dirty = True
             else:
-                rc = proc.poll() if proc else -1
+                err = getattr(rec, "_error", None) if rec else None
                 if info["_out_path"]:
-                    logger.info(f"[{name}] 录制进程退出 (exit={rc})")
+                    logger.info(f"[{name}] 录制线程结束"
+                                + (f" (错误: {err})" if err else ""))
                     post_process(info["_out_path"])
                 info["status"] = STATUS_IDLE
-                info["pid"] = None
                 info["start_time"] = 0
                 info["_proc"] = None
                 info["_out_path"] = None
@@ -585,7 +606,6 @@ class RecorderApp:
             info["next_check"] = now + self.cfg["check_interval"]
             self._dirty = True
             return
-        info["pid"] = proc.pid
         info["_proc"] = proc
         info["_out_path"] = out_path
         self._dirty = True
@@ -699,7 +719,7 @@ class RecorderApp:
             return
         proc = info.get("_proc")
         out_path = info.get("_out_path")
-        _terminate_proc(proc)
+        _stop_recorder(proc)
         if out_path:
             logger.info(f"[{name}] 手动停止录制")
             post_process(out_path)
@@ -876,7 +896,7 @@ class RecorderApp:
         if self.ui_job:
             self.root.after_cancel(self.ui_job)
         for name, info in self.state.items():
-            _terminate_proc(info.get("_proc"))
+            _stop_recorder(info.get("_proc"))
             out_path = info.get("_out_path")
             if out_path:
                 logger.info(f"[{name}] 退出时停止录制")
