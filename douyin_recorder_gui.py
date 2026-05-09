@@ -103,7 +103,7 @@ def save_config(cfg):
         "streamers": [{"name": s["name"], "url": s["url"]} for s in cfg["streamers"]],
     }
     CONFIG_PATH.write_text(json.dumps(out, ensure_ascii=False, indent=2),
-                           encoding="utf-8-sig")
+                           encoding="utf-8")
 
 
 def load_state():
